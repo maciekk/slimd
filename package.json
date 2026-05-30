@@ -1,0 +1,17 @@
+{
+  "name": "slimd",
+  "version": "0.1.0",
+  "description": "Obsidian plugin to tidy Markdown notes",
+  "private": true,
+  "scripts": {
+    "build": "node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs",
+    "install:vault": "bash scripts/install.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.31",
+    "esbuild": "^0.25.5",
+    "obsidian": "^1.8.10",
+    "typescript": "^5.8.3"
+  }
+}

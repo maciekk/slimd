@@ -1,0 +1,10 @@
+{
+  "id": "slimd",
+  "name": "SliMD",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Tidy Markdown notes by removing list whitespace and fixing heading depth.",
+  "author": "maciek",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}
