@@ -4,6 +4,15 @@ function isListItem(line: string): boolean {
   return /^\s*(?:[-*+]\s+|\d+[.)]\s+)/.test(line);
 }
 
+function isHorizontalRule(line: string): boolean {
+  const trimmed = line.trim();
+  return /^(?:\*\s*){3,}$|^(?:-\s*){3,}$|^(?:_\s*){3,}$/.test(trimmed);
+}
+
+function isHeadingLine(line: string): boolean {
+  return /^(#{1,6})\s+/.test(line.trim());
+}
+
 function removeBlankLinesBetweenListItems(text: string): string {
   const lines = text.split("\n");
   const out: string[] = [];
@@ -50,7 +59,7 @@ function shouldAutoDemoteHeadings(text: string): boolean {
 
   for (const raw of lines) {
     const line = raw.trim();
-    if (line === "") continue;
+    if (line === "" || isHorizontalRule(line)) continue;
 
     const m = line.match(/^(#{1,6})\s+/);
     if (!m) return false;
@@ -59,6 +68,33 @@ function shouldAutoDemoteHeadings(text: string): boolean {
   }
 
   return false;
+}
+
+function removeBlankLinesAfterHorizontalRules(text: string): string {
+  const lines = text.split("\n");
+  const out: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (line.trim() === "") {
+      let prev = i - 1;
+      while (prev >= 0 && lines[prev].trim() === "") prev--;
+
+      let next = i + 1;
+      while (next < lines.length && lines[next].trim() === "") next++;
+
+      if (prev >= 0 && next < lines.length) {
+        if (isHorizontalRule(lines[prev]) && isHeadingLine(lines[next])) {
+          continue;
+        }
+      }
+    }
+
+    out.push(line);
+  }
+
+  return out.join("\n");
 }
 
 function applyToEditor(
@@ -94,6 +130,7 @@ export default class SlimDPlugin extends Plugin {
           editor,
           (text) => {
             let next = removeBlankLinesBetweenListItems(text);
+            next = removeBlankLinesAfterHorizontalRules(next);
             if (shouldAutoDemoteHeadings(next)) {
               next = demoteHeadingsByOne(next);
             }
