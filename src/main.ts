@@ -120,6 +120,33 @@ function applyToEditor(
   new Notice(`${successLabel}: cleaned up`);
 }
 
+function applyToSelection(
+  editor: Editor,
+  transform: (text: string) => string,
+  successLabel: string
+): void {
+  const original = editor.getSelection();
+
+  if (original.length === 0) {
+    new Notice(`${successLabel}: no selection`);
+    return;
+  }
+
+  const updated = transform(original);
+
+  if (updated === original) {
+    new Notice(`${successLabel}: no changes needed`);
+    return;
+  }
+
+  const scroll = editor.getScrollInfo();
+
+  editor.replaceSelection(updated);
+  editor.scrollTo(scroll.left, scroll.top);
+
+  new Notice(`${successLabel}: cleaned up`);
+}
+
 export default class SlimDPlugin extends Plugin {
   async onload(): Promise<void> {
     this.addCommand({
@@ -146,6 +173,33 @@ export default class SlimDPlugin extends Plugin {
       name: "SliMD: Tighten list spacing",
       editorCallback: (editor) => {
         applyToEditor(editor, removeBlankLinesBetweenListItems, "SliMD list cleanup");
+      }
+    });
+
+    this.addCommand({
+      id: "slimd-tighten-headings",
+      name: "SliMD: Tighten heading spacing",
+      editorCallback: (editor) => {
+        applyToEditor(editor, removeBlankLinesAfterHorizontalRules, "SliMD heading cleanup");
+      }
+    });
+
+    this.addCommand({
+      id: "slimd-tidy-selection",
+      name: "SliMD: Tidy selection",
+      editorCallback: (editor) => {
+        applyToSelection(
+          editor,
+          (text) => {
+            let next = removeBlankLinesBetweenListItems(text);
+            next = removeBlankLinesAfterHorizontalRules(next);
+            if (shouldAutoDemoteHeadings(next)) {
+              next = demoteHeadingsByOne(next);
+            }
+            return next;
+          },
+          "SliMD"
+        );
       }
     });
 
