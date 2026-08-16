@@ -9,31 +9,76 @@ function isHorizontalRule(line: string): boolean {
   return /^(?:\*\s*){3,}$|^(?:-\s*){3,}$|^(?:_\s*){3,}$/.test(trimmed);
 }
 
-function isHeadingLine(line: string): boolean {
-  return /^(#{1,6})\s+/.test(line.trim());
+function isBlockquoteLine(line: string): boolean {
+  return /^\s*>/.test(line);
 }
 
-function removeBlankLinesBetweenListItems(text: string): string {
+function isFenceLine(line: string): boolean {
+  return /^\s*(```|~~~)/.test(line);
+}
+
+function endsWithIntroPunctuation(line: string): boolean {
+  return /[:：]\s*$/.test(line.trim());
+}
+
+function getProtectedLineMask(lines: string[]): boolean[] {
+  const mask: boolean[] = [];
+  let inFence = false;
+
+  for (const line of lines) {
+    if (isFenceLine(line)) {
+      mask.push(true);
+      inFence = !inFence;
+      continue;
+    }
+
+    mask.push(inFence);
+  }
+
+  return mask;
+}
+
+function removeBlankLinesAroundStructuredBlocks(text: string): string {
   const lines = text.split("\n");
+  const protectedMask = getProtectedLineMask(lines);
   const out: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    if (line.trim() === "") {
-      let prev = i - 1;
-      while (prev >= 0 && lines[prev].trim() === "") prev--;
+    if (protectedMask[i] || line.trim() !== "") {
+      out.push(line);
+      continue;
+    }
 
-      let next = i + 1;
-      while (next < lines.length && lines[next].trim() === "") next++;
+    let prev = i - 1;
+    while (prev >= 0 && lines[prev].trim() === "") prev--;
 
-      if (prev >= 0 && next < lines.length) {
-        const prevIsList = isListItem(lines[prev]);
-        const nextIsList = isListItem(lines[next]);
+    let next = i + 1;
+    while (next < lines.length && lines[next].trim() === "") next++;
 
-        if ((prevIsList && nextIsList) || (!prevIsList && nextIsList)) {
-          continue;
-        }
+    if (
+      prev >= 0 &&
+      next < lines.length &&
+      !protectedMask[prev] &&
+      !protectedMask[next]
+    ) {
+      const prevLine = lines[prev];
+      const nextLine = lines[next];
+      const prevIsList = isListItem(prevLine);
+      const nextIsList = isListItem(nextLine);
+      const nextIsBlockquote = isBlockquoteLine(nextLine);
+
+      if ((prevIsList && nextIsList) || (!prevIsList && nextIsList)) {
+        continue;
+      }
+
+      if (endsWithIntroPunctuation(prevLine) && nextIsBlockquote) {
+        continue;
+      }
+
+      if (isHorizontalRule(prevLine)) {
+        continue;
       }
     }
 
@@ -43,11 +88,56 @@ function removeBlankLinesBetweenListItems(text: string): string {
   return out.join("\n");
 }
 
+function collapseConsecutiveBlankLines(text: string): string {
+  const lines = text.split("\n");
+  const protectedMask = getProtectedLineMask(lines);
+  const out: string[] = [];
+  let previousWasBlank = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (protectedMask[i]) {
+      out.push(line);
+      previousWasBlank = false;
+      continue;
+    }
+
+    const isBlank = line.trim() === "";
+    if (isBlank && previousWasBlank) {
+      continue;
+    }
+
+    out.push(line);
+    previousWasBlank = isBlank;
+  }
+
+  return out.join("\n");
+}
+
 function demoteHeadingsByOne(text: string): string {
-  return text
-    .split("\n")
+  const lines = text.split("\n");
+  let firstContentSeen = false;
+  let preservedTitle = false;
+
+  return lines
     .map((line) => {
+      const trimmed = line.trim();
+
+      if (trimmed === "" || isHorizontalRule(trimmed)) {
+        return line;
+      }
+
       const m = line.match(/^(#{1,5})(\s+.*)$/);
+
+      if (!firstContentSeen) {
+        firstContentSeen = true;
+        if (m && m[1].length === 1) {
+          preservedTitle = true;
+          return line;
+        }
+      }
+
       if (!m) return line;
       return `#${m[1]}${m[2]}`;
     })
@@ -68,33 +158,6 @@ function shouldAutoDemoteHeadings(text: string): boolean {
   }
 
   return false;
-}
-
-function removeBlankLinesAfterHorizontalRules(text: string): string {
-  const lines = text.split("\n");
-  const out: string[] = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    if (line.trim() === "") {
-      let prev = i - 1;
-      while (prev >= 0 && lines[prev].trim() === "") prev--;
-
-      let next = i + 1;
-      while (next < lines.length && lines[next].trim() === "") next++;
-
-      if (prev >= 0 && next < lines.length) {
-        if (isHorizontalRule(lines[prev]) && isHeadingLine(lines[next])) {
-          continue;
-        }
-      }
-    }
-
-    out.push(line);
-  }
-
-  return out.join("\n");
 }
 
 function applyToEditor(
@@ -156,8 +219,8 @@ export default class SlimDPlugin extends Plugin {
         applyToEditor(
           editor,
           (text) => {
-            let next = removeBlankLinesBetweenListItems(text);
-            next = removeBlankLinesAfterHorizontalRules(next);
+            let next = removeBlankLinesAroundStructuredBlocks(text);
+            next = collapseConsecutiveBlankLines(next);
             if (shouldAutoDemoteHeadings(next)) {
               next = demoteHeadingsByOne(next);
             }
@@ -172,15 +235,15 @@ export default class SlimDPlugin extends Plugin {
       id: "slimd-tighten-lists",
       name: "SliMD: Tighten list spacing",
       editorCallback: (editor) => {
-        applyToEditor(editor, removeBlankLinesBetweenListItems, "SliMD list cleanup");
+        applyToEditor(editor, removeBlankLinesAroundStructuredBlocks, "SliMD list cleanup");
       }
     });
 
     this.addCommand({
-      id: "slimd-tighten-headings",
-      name: "SliMD: Tighten heading spacing",
+      id: "slimd-tighten-spacing",
+      name: "SliMD: Tighten spacing",
       editorCallback: (editor) => {
-        applyToEditor(editor, removeBlankLinesAfterHorizontalRules, "SliMD heading cleanup");
+        applyToEditor(editor, collapseConsecutiveBlankLines, "SliMD spacing cleanup");
       }
     });
 
@@ -191,8 +254,8 @@ export default class SlimDPlugin extends Plugin {
         applyToSelection(
           editor,
           (text) => {
-            let next = removeBlankLinesBetweenListItems(text);
-            next = removeBlankLinesAfterHorizontalRules(next);
+            let next = removeBlankLinesAroundStructuredBlocks(text);
+            next = collapseConsecutiveBlankLines(next);
             if (shouldAutoDemoteHeadings(next)) {
               next = demoteHeadingsByOne(next);
             }

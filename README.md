@@ -7,9 +7,15 @@ SliMD tidies Markdown notes copied from AI tools or other sources.
 - **SliMD: Tidy current note**
   - Removes blank lines between list items
   - Removes blank lines immediately before list blocks
-  - Removes blank lines after horizontal rules when followed by headings
-  - If the first non-empty line is an `#` heading, demotes all headings by 1 level
+  - Removes blank lines between an introductory `:` line and a following blockquote
+  - Removes blank lines after horizontal rules
+  - Collapses repeated blank lines to a single blank line
+  - If the first non-empty line is an `#` heading, preserves it as the title and demotes subsequent headings by 1 level
+  - Does not modify fenced code blocks
 - **SliMD: Tighten list spacing**
+  - Applies the structural blank-line cleanup rules above without heading demotion
+- **SliMD: Tighten spacing**
+  - Collapses repeated blank lines to a single blank line
 - **SliMD: Demote headings by 1 level**
 
 ## Development
